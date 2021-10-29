@@ -41,7 +41,7 @@ typedef struct {
  *												Function prototypes
  ************************************************************************************************************/
 void TIMER_init(const configType* config_struct_ptr);
-void TIMER0_setCallBack(const void(*a_ptr2fun0)(void));
+void TIMER0_setCallBack(void(*a_ptr2fun0)(void));
 void TIMER1_setCallBack(const void(*a_ptr2fun1)(void));
 void TIMER2_setCallBack(const void(*a_ptr2fun2)(void));
 void TIMER_deinit(uint8 timer_id);
