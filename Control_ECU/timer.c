@@ -34,6 +34,18 @@ ISR(TIMER0_COMP_vect){
 		(*g_ptr2fun0)();
 	}
 }
+ISR(TIMER1_OVF_vect){
+	/*THIS condition avoid the program crashing*/
+	if(g_ptr2fun1 != NULL_PTR){
+		(*g_ptr2fun1)();
+	}
+}
+ISR(TIMER1_COMPA_vect){
+	/*THIS condition avoid the program crashing*/
+	if(g_ptr2fun1 != NULL_PTR){
+		(*g_ptr2fun1)();
+	}
+}
 ISR(TIMER2_OVF_vect){
 	/*THIS condition avoid the program crashing*/
 	if(g_ptr2fun2 != NULL_PTR){
@@ -88,19 +100,54 @@ void TIMER_init(const configType* config_struct_ptr){
 		TCNT0 = (uint8)config_struct_ptr->timer_init_value;
 
 	}else if(config_struct_ptr->timer_id == timer1_ID){
-
+		/*check the mode you want to work with */
+		if(config_struct_ptr->mode == normal_mode){
+			/*
+			 * 1) COM1A1 = 0 & COM1A0 = 0 -> TO disable compare output mode of channel A
+			 * 2) COM1B1 = 0 & COM1B0 = 0 -> TO disable compare output mode of channel B
+			 * 3) FOC1A = 1 -> as this not PWM mode
+			 * 4) WGM11 = 0 & WGM10 =0 -> TO work with the timer normal mode
+			 */
+			TCCR1A = (1<<FOC1A);
+			 /*
+			  * 1) WGM12 = 0 & WGM13 =0 -> TO work with the timer normal mode
+			  * 2) adjust the clock select bits -> CS10 & CS11 & CS12
+			  */
+			TCCR1B = (config_struct_ptr->prescaler_value & 0x07);
+			/*enable the module interrupt for the overflow mode*/
+			TIMSK |= (1<<TOIE1);
+		}else if(config_struct_ptr->mode == compare_mode){
+			/*
+			 * 1) COM1A1 = 0 & COM1A0 = 0 -> TO disable compare output mode of channel A
+			 * 2) COM1B1 = 0 & COM1B0 = 0 -> TO disable compare output mode of channel B
+	     	 * 3) FOC1A = 1 -> as this not PWM mode
+			 * 4) WGM11 = 0 & WGM10 =0 -> TO work with the timer compare mode
+			 */
+			TCCR1A = (1<<FOC1A);
+			/*
+			 * 1) WGM12 = 1 & WGM13 =0 -> TO work with the timer compare mode
+			 * 2) adjust the clock select bits -> CS10 & CS11 & CS12
+			 */
+			TCCR1B = (1<<WGM12)|(config_struct_ptr->prescaler_value & 0x07);
+			/*enable the module interrupt for the compare on channel A mode*/
+			TIMSK |= (1<<OCIE1A);
+			/*set the compare value in OCR1 register*/
+			OCR1A =  config_struct_ptr->timer_compare_value;
+		}
+		/*set the init value in the timer register*/
+		TCNT1 = config_struct_ptr->timer_init_value;
 	}else if(config_struct_ptr->timer_id == timer2_ID){
 		/*check the timer mode you want to work with*/
 			if(config_struct_ptr->mode == normal_mode){
 			  /*enable the timer over flow interrupt*/
 				TIMSK |= (1<<TOIE2);
 				/*
-				 * 1) FOC0 = 1 -> force output compare pin must equal to 1 when non PWM
-				 * 2) WGM00 = 0 & WGM01 =0 -> TO work with normal mode
-				 * 3) COM01 =0 & COM00 = 0 -> TO disconnect compare match output mode
+				 * 1) FOC2 = 1 -> force output compare pin must equal to 1 when non PWM
+				 * 2) WGM20 = 0 & WGM21 =0 -> TO work with normal mode
+				 * 3) COM21 =0 & COM20 = 0 -> TO disconnect compare match output mode
+				 * Note : this switch case because the prescaler table for timer2 is different than
+				 * the prescaler tables for timer0 and timer 1
 				 */
-				/*this switch case because the prescaler table for timer2 is different than
-				 * the prescaler tables for timer0 and timer 1*/
 				switch(config_struct_ptr->prescaler_value){
 				case no_prescaler : TCCR2 = (1<<FOC2)|(1<<CS20);
 					break;
@@ -120,9 +167,9 @@ void TIMER_init(const configType* config_struct_ptr){
 				/*enable the output compare match interrupt*/
 				TIMSK |= (1<<OCIE2);
 				/*
-				 * 1) FOC0 = 1 -> force output compare pin must equal to 1 when non PWM
-				 * 2) WGM00 = 0 & WGM01 =1 -> TO work with compare  mode
-				 * 3) COM01 =0 & COM00 = 0 -> TO disconnect compare match output mode
+				 * 1) FOC2 = 1 -> force output compare pin must equal to 1 when non PWM
+				 * 2) WGM20 = 0 & WGM21 =1 -> TO work with compare  mode
+				 * 3) COM21 =0 & COM20 = 0 -> TO disconnect compare match output mode
 				 * Note : this switch case because the prescaler table for timer2 is different than
 				 * the prescaler tables for timer0 and timer 1
 				 */
