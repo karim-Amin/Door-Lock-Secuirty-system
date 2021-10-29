@@ -77,7 +77,7 @@ void TIMER_init(const configType* config_struct_ptr){
 			 * 2) WGM00 = 0 & WGM01 =0 -> TO work with normal mode
 			 * 3) COM01 =0 & COM00 = 0 -> TO disconnect compare match output mode
 			 */
-			TCCR0 = (1<<FOC0)|(0x07&config_struct_ptr->prescaler_value);
+			TCCR0 = (1<<FOC0)|(TIMER_PRESCALER_MASK&config_struct_ptr->prescaler_value);
 
 		}else if(config_struct_ptr->mode == compare_mode){
 			/*set the output compare value*/
@@ -92,7 +92,7 @@ void TIMER_init(const configType* config_struct_ptr){
 			/*
 			 * insert the prescaler value in the first three bits in the control register:)
 			 */
-			TCCR0 = (1<<FOC0)|(1<<WGM01)|(0x07&config_struct_ptr->prescaler_value);
+			TCCR0 = (1<<FOC0)|(1<<WGM01)|(TIMER_PRESCALER_MASK&config_struct_ptr->prescaler_value);
 
 		}
 		/*
@@ -114,7 +114,7 @@ void TIMER_init(const configType* config_struct_ptr){
 			  * 1) WGM12 = 0 & WGM13 =0 -> TO work with the timer normal mode
 			  * 2) adjust the clock select bits -> CS10 & CS11 & CS12
 			  */
-			TCCR1B = (config_struct_ptr->prescaler_value & 0x07);
+			TCCR1B = (config_struct_ptr->prescaler_value & TIMER_PRESCALER_MASK);
 			/*enable the module interrupt for the overflow mode*/
 			TIMSK |= (1<<TOIE1);
 		}else if(config_struct_ptr->mode == compare_mode){
@@ -129,7 +129,7 @@ void TIMER_init(const configType* config_struct_ptr){
 			 * 1) WGM12 = 1 & WGM13 =0 -> TO work with the timer compare mode
 			 * 2) adjust the clock select bits -> CS10 & CS11 & CS12
 			 */
-			TCCR1B = (1<<WGM12)|(config_struct_ptr->prescaler_value & 0x07);
+			TCCR1B = (1<<WGM12)|(config_struct_ptr->prescaler_value & TIMER_PRESCALER_MASK);
 			/*enable the module interrupt for the compare on channel A mode*/
 			TIMSK |= (1<<OCIE1A);
 			/*set the compare value in OCR1 register*/
