@@ -1,5 +1,4 @@
 
-
 /*************************************************************************************************************
  *  module : I2C
  *  file name : I2C.h
@@ -22,7 +21,6 @@
 #define TWI_MR_DATA_ACK   0x50 /* Master received data and send ACK to slave. */
 #define TWI_MR_DATA_NACK  0x58 /* Master received data but doesn't send ACK to slave. */
 #define TWI_STATUS_MASK   0XF8 /*use this mask to get the status of TWI bus from the register TWSR*/
-#define F_CPU 8000000UL /*this is the frequency of the target device */
 /************************************************************************************************************
  * 									Types Declaration
  ************************************************************************************************************/
