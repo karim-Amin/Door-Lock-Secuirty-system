@@ -15,11 +15,11 @@
 /*******************************************************************************
  *                                Definitions                                  *
  *******************************************************************************/
-#define LCD_DATA_PORT_ID PORTA_ID
-#define LCD_CONTROL_PORT_ID PORTB_ID
-#define LCD_RS_PIN_ID PIN0_ID
-#define LCD_RW_PIN_ID PIN1_ID
-#define LCD_E_PIN_ID PIN2_ID
+#define LCD_DATA_PORT_ID PORTB_ID
+#define LCD_CONTROL_PORT_ID PORTC_ID
+#define LCD_RS_PIN_ID PIN5_ID
+#define LCD_RW_PIN_ID PIN6_ID
+#define LCD_E_PIN_ID PIN7_ID
 /* LCD Commands*/
 #define CLEAR_COMMAND 0x01
 #define RETURN_HOME_COMMAND 0x02
