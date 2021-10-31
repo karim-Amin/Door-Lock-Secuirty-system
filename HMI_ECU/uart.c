@@ -36,6 +36,8 @@ void UART_init(const config_struct* configStruct){
 	 */
 	/*insert the first two bits*/
 	UCSRC = (UCSRC & UART_CHARACTER_SIZE_FIRST_BITS_MASK)|((configStruct->character_size & 0x3)<<UCSZ0);
+	/*THE driver will not work because of this line*/
+	/*UCSRB = (UCSRB &0xFB) |(configStruct->character_size &0x4)*/
 	/*
 	 * select the baud rate to be 9600 bit/sec
 	 * UBRR =( Fosc / (8*BAUD) ) - 1

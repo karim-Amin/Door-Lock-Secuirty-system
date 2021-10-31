@@ -4,7 +4,7 @@
  *
  * File Name: control.c
  *
- * Description: to contain the app functions
+ * Description: to contain the app functions for the control ecu
  *
  * Author: Karim Mohamed Amin
  *
