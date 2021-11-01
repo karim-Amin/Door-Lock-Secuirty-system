@@ -22,10 +22,9 @@
  *******************************************************************************/
 /*setup the TIMER1 configuration */
 TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,15000};
-/*dynamic configuration for timer0*/
-TimerconfigType s_timer0_config = {timer0_ID,normal_mode,prescaler_1024,0,0};
 /*to know how many times the user entered wrong password*/
 uint8 wrong_pass_count = 0;
+uint8 g_flag = 0;
 /*******************************************************************************
  *                                Definitions                                  *
  *******************************************************************************/
@@ -37,6 +36,7 @@ uint8 wrong_pass_count = 0;
 #define HMI_ECU_READY 0x20
 #define NUM_OF_PASSWORD_DIGIT 5
 #define PASSWORD_ADDRESS_IN_EEPROM 0x000
+#define ERROR_MESSAGE 0xFF
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
@@ -45,8 +45,8 @@ void CONTROL_savePasswordInEEPROM(const uint8* password_ptr);
 void CONTROL_sendStatus(uint8 state);
 void CONTROL_getPasswordEEPROM(uint8* password_ptr);
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password);
-void CONTROL_handelMotorTimeOut();
-void CONTROL_handelTimer0TimeOut();
+void CONTROL_handelMotorTimeOut(void);
+void CONTROL_stopMotor(void);
 uint8 CONTROL_setupFirstPassword(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
 uint8 CONTROL_checkTwoPasswords(const uint8* a_first_password_ptr,const uint8* a_second_password_ptr);
 /*******************************************************************************
@@ -64,11 +64,11 @@ int main(void){
 
 	/*setting the callback functions*/
 	TIMER1_setCallBack(CONTROL_handelMotorTimeOut);
-	TIMER0_setCallBack(CONTROL_handelTimer0TimeOut);
 	/* 	calling the init functions for each driver */
 	UART_init(&s_uart_config);
 	TWI_init(&s_twi_config);
 	DcMotor_init();
+	BUZZER_init();
 	/*set the I-bit to be able to use the timer driver*/
 	SREG |= (1<<7);
 	DDRB |= (1<<PB0);
@@ -79,7 +79,9 @@ int main(void){
 		}else{
 			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
 		}
+		while(g_flag == 0){
 		CONTROL_handelOpenDoor(first_password_buff,second_password_buff);
+		}
 	}
 	return 0;
 }
@@ -165,17 +167,6 @@ void CONTROL_sendStatus(uint8 state){
 	UART_sendByte(state);
 }
 
-void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
-
-	CONTROL_receivePasswordFromHMI(password_ptr);
-	if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
-		DcMotor_Rotate(clock_wise,100);
-		/*start counting 15 seconds*/
-		TIMER_init(&s_timer1_config);
-	}else{
-		wrong_pass_count++;
-	}
-}
 void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 	uint8 counter;
 	uint8 byte;
@@ -188,18 +179,38 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 		password_ptr[counter] = byte;
 	}
 }
-void CONTROL_handelTimer0TimeOut(){
-	static uint8 counter = 0;
-	counter++;
-	if(counter == 12){
 
+void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
+
+	CONTROL_receivePasswordFromHMI(password_ptr);
+	if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
+		CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
+		DcMotor_Rotate(clock_wise,100);
+		/*start counting 15 seconds*/
+		TIMER_init(&s_timer1_config);
+	}else{
+		wrong_pass_count++;
+		if(wrong_pass_count < 3){
+			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+		}else{
+			CONTROL_sendStatus(ERROR_MESSAGE);
+			BUZZER_ON();
+		}
 	}
 }
-void CONTROL_handelMotorTimeOut(){
+void CONTROL_stopMotor(void){
+	DcMotor_Rotate(stop_motor,0);
+	g_flag = 1;
+}
+void CONTROL_handelMotorTimeOut(void){
 	/*to stop the DC motor after 15 seconds*/
 	DcMotor_Rotate(stop_motor,0);
 	/*TO disable timer 1*/
 	TIMER_deinit(timer1_ID);
-	/*to start counting 3 seconds using timer0*/
-	TIMER_init(&s_timer0_config);
+	/*wait three seconds and close the door*/
+	_delay_ms(3000);
+	DcMotor_Rotate(anti_clock_wise,100);
+	TIMER1_setCallBack(CONTROL_stopMotor);
+	/*start counting 15 seconds*/
+	TIMER_init(&s_timer1_config);
 }

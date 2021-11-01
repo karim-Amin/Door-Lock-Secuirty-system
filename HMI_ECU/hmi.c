@@ -16,6 +16,11 @@
 #include <avr/io.h> /* to enable the global interrupt*/
 #include <util/delay.h>
 /*******************************************************************************
+ *                                global variables                            *
+ *******************************************************************************/
+/*to hold the status of the passwords sent by control ECU*/
+uint8 g_status;
+/*******************************************************************************
  *                                Definitions                                  *
  *******************************************************************************/
 #define CONTROL_ECU_READY 0x10
@@ -26,6 +31,7 @@
 #define HMI_BAUD_RATE 9600
 #define OPEN_DOOR_OPTION '+'
 #define CHANGE_PASSWORD_OPTION '-'
+#define ERROR_MESSAGE 0xFF
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
@@ -33,6 +39,8 @@ void HMI_takePassword(uint8* password_ptr);
 void HMI_sendPasswordToControl(const uint8* password_ptr);
 void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
 void HMI_displayMainOptions(void);
+void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
+void HMI_handleOptions(uint8* password_ptr);
 uint8 HMI_takeOption(void);
 uint8 HMI_receiveStatus(void);
 /*******************************************************************************
@@ -43,10 +51,7 @@ int main(void){
 	uint8 first_password_buff[NUM_OF_PASSWORD_DIGIT];
 	/*to hold the second_password taken from the user*/
 	uint8 second_password_buff[NUM_OF_PASSWORD_DIGIT];
-	/*to hold the status of the passwords sent by control ECU*/
-	uint8 status;
-	/*to hold the option that the user choose*/
-	uint8 selected_option;
+
 	/*setup the UART configuration*/
 	config_struct s_uart_config = {no_parity,eigth_bits,one_stop_bit,Asynch,HMI_BAUD_RATE};
 
@@ -57,37 +62,14 @@ int main(void){
 	SREG |= (1<<7);
 
 	while(1){
+		/************************************************************************************************/
 												/*step1 code*/
 		/************************************************************************************************/
-		while(1){
-		HMI_setPasswordFirstTime(first_password_buff,second_password_buff);
-		status = HMI_receiveStatus();
-		if(status == CONTROL_PASSWORD_MATCH){
-			LCD_displayString("Correct!!");
-			_delay_ms(500);/*to be able to see the message*/
-			break;/*go to the next step*/
-		}else{
-			/*i will repeat the step1 if the passwords do not match*/
-			LCD_displayString("Not Correct");
-		}
-	   }
+		HMI_setAndCheckStatus(first_password_buff,second_password_buff);
 		/************************************************************************************************/
 												/*step2 code*/
 		/************************************************************************************************/
-		while(1){
-		HMI_displayMainOptions();
-		selected_option = HMI_takeOption();
-		if(selected_option == OPEN_DOOR_OPTION){
-			LCD_clear();
-			LCD_displayString("Please Enter password : ");
-			HMI_takePassword(first_password_buff);
-			HMI_sendPasswordToControl(first_password_buff);
-			status = HMI_receiveStatus();
-		}else if(selected_option == CHANGE_PASSWORD_OPTION){
-
-		}
-
-		}
+		HMI_handleOptions(first_password_buff);
 		/************************************************************************************************/
 
 	}
@@ -109,7 +91,7 @@ void HMI_takePassword(uint8* password_ptr){
 		password_ptr[count] = KEYPAD_getPressedKey();
 		LCD_displayStringRowColumn(1,count,"*");
 		/*to avoid taking the pressed number more than one time*/
-		_delay_ms(250);
+		_delay_ms(400);
 	}
 }
 /*
@@ -142,6 +124,22 @@ void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_passwo
 	HMI_sendPasswordToControl(a_first_password_ptr);
 	HMI_sendPasswordToControl(a_second_password_ptr);
 }
+void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
+	while(1)
+	{
+		HMI_setPasswordFirstTime(a_first_password_ptr,a_second_password_ptr);
+		g_status = HMI_receiveStatus();
+		if(g_status == CONTROL_PASSWORD_MATCH){
+			LCD_displayString("Correct!!");
+			_delay_ms(500);/*to be able to see the message*/
+			break;/*go to the next step*/
+		}else{
+			/*i will repeat the step1 if the passwords do not match*/
+			LCD_displayString("Not Correct");
+			_delay_ms(500);/*to be able to see the message*/
+		}
+	}
+}
 /*
  * Description : this function gets the status of the passwords from control ECU
  * matching or not
@@ -166,4 +164,31 @@ void HMI_displayMainOptions(void){
  */
 uint8 HMI_takeOption(void){
 	return KEYPAD_getPressedKey();
+}
+void HMI_handleOptions(uint8* password_ptr){
+	/*to hold the option that the user choose*/
+	uint8 selected_option;
+	while(1){
+		HMI_displayMainOptions();
+		selected_option = HMI_takeOption();
+		if(selected_option == OPEN_DOOR_OPTION){
+			LCD_clear();
+			LCD_displayString("Please Enter password : ");
+			HMI_takePassword(password_ptr);
+			HMI_sendPasswordToControl(password_ptr);
+			g_status = HMI_receiveStatus();
+			if(g_status == CONTROL_PASSWORD_MATCH){
+				LCD_clear();
+				LCD_displayString("Opening The Door");
+				_delay_ms(15000);
+			}else if(g_status == CONTROL_PASSWORD_DISMATCH){
+
+			}else if(g_status == ERROR_MESSAGE){
+				LCD_clear();
+				LCD_displayString("ERROR !");
+			}
+		}else if(selected_option == CHANGE_PASSWORD_OPTION){
+
+		}
+	}
 }
