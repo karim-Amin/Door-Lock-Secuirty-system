@@ -18,7 +18,6 @@
  *												 Definitions
  ************************************************************************************************************/
 #define TIMER_PRESCALER_MASK 0x07
-#
 /***********************************************************************************************************
  *												Type Definitions
  ************************************************************************************************************/
@@ -37,11 +36,11 @@ typedef struct {
 	prescaler prescaler_value;
 	uint16 timer_init_value;
 	uint16 timer_compare_value;
-}configType;
+}TimerconfigType;
 /***********************************************************************************************************
  *												Function prototypes
  ************************************************************************************************************/
-void TIMER_init(const configType* config_struct_ptr);
+void TIMER_init(const TimerconfigType* config_struct_ptr);
 void TIMER0_setCallBack(void(*a_ptr2fun0)(void));
 void TIMER1_setCallBack(const void(*a_ptr2fun1)(void));
 void TIMER2_setCallBack(const void(*a_ptr2fun2)(void));
