@@ -20,7 +20,7 @@ void TWI_init(const ConfigType* config_struct_ptr){
 	TWBR = ((uint8)(F_CPU/config_struct_ptr->bit_rate_type)-16)/2;
 	/* the seven MSB are the address of the device so we have to shift
 	 * the address received by one bit to the left :) */
-	TWAR = (config_struct_ptr->bit_rate_type)<<1;
+	TWAR = (config_struct_ptr->address)<<1;
 	/*
 	 *1) disable the acknowledge bit => TWEA = 0
 	 *2) start condition bit = 0

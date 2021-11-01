@@ -19,6 +19,8 @@
  *                                Definitions                                  *
  *******************************************************************************/
 #define CONTROL_ECU_READY 0x10
+#define CONTROL_PASSWORD_MATCH 0x11
+#define CONTROL_PASSWORD_DISMATCH 0x00
 #define HMI_ECU_READY 0x20
 #define NUM_OF_PASSWORD_DIGIT 5
 #define HMI_BAUD_RATE 9600
@@ -27,13 +29,16 @@
  *******************************************************************************/
 void HMI_takePassword(uint8* password_ptr);
 void HMI_sendPasswordToControl(const uint8* password_ptr);
-void HMI_setPasswordFirstTime(const uint8* password_ptr);
+void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
+uint8 HMI_receiveStatus();
 /*******************************************************************************
  *                             The entry point (main method)                  *
  *******************************************************************************/
 int main(void){
 	/*to hold the password taken from the user*/
-	uint8 password_buff[NUM_OF_PASSWORD_DIGIT];
+	uint8 first_password_buff[NUM_OF_PASSWORD_DIGIT];
+	uint8 second_password_buff[NUM_OF_PASSWORD_DIGIT];
+	uint8 status;
 	config_struct s_uart_config = {no_parity,eigth_bits,one_stop_bit,Asynch,HMI_BAUD_RATE};
 	/*configType s_timer_config ={};*/
 	LCD_init();
@@ -41,7 +46,14 @@ int main(void){
 	/*set the I-bit to be able to use the timer driver*/
 	SREG |= (1<<7);
 	while(1){
-		HMI_setPasswordFirstTime(password_buff);
+		HMI_setPasswordFirstTime(first_password_buff,second_password_buff);
+		status = HMI_receiveStatus();
+		if(status == CONTROL_PASSWORD_MATCH){
+			LCD_displayString("verified");
+		}else{
+			LCD_displayString("not verified");
+
+		}
 	}
 	return 0;
 }
@@ -56,7 +68,7 @@ void HMI_takePassword(uint8* password_ptr){
 	for(count = 0;count<NUM_OF_PASSWORD_DIGIT;count++){
 		password_ptr[count] = KEYPAD_getPressedKey();
 		LCD_displayStringRowColumn(1,count,"*");
-		_delay_ms(500);
+		_delay_ms(250);
 	}
 }
 void HMI_sendPasswordToControl(const uint8* password_ptr){
@@ -69,15 +81,19 @@ void HMI_sendPasswordToControl(const uint8* password_ptr){
 			UART_sendByte(password_ptr[count]);
 		}
 }
-void HMI_setPasswordFirstTime(const uint8* password_ptr){
+void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	LCD_displayStringRowColumn(0,0,"Please Enter pass: ");
-	HMI_takePassword(password_ptr);
-	HMI_sendPasswordToControl(password_ptr);
+	HMI_takePassword(a_first_password_ptr);
 	LCD_clear();
 	LCD_displayStringRowColumn(0,0,"Please re-enter pass: ");
-	HMI_takePassword(password_ptr);
-	HMI_sendPasswordToControl(password_ptr);
+	HMI_takePassword(a_second_password_ptr);
 	LCD_clear();
-	LCD_displayStringRowColumn(0,0,"checking the password");
-	LCD_clear();
+	HMI_sendPasswordToControl(a_first_password_ptr);
+	HMI_sendPasswordToControl(a_second_password_ptr);
+}
+uint8 HMI_receiveStatus(){
+	/*wait until the control ECU is ready to send the status*/
+	while(UART_recieveByte()!= CONTROL_ECU_READY);
+	UART_sendByte(HMI_ECU_READY);
+	return UART_recieveByte();
 }

@@ -33,7 +33,7 @@ typedef enum{
 }BitRateType;
 typedef struct{
 	BitRateType bit_rate_type;
-	uint8 adress;
+	uint8 address;
 }ConfigType;
 /************************************************************************************************************
  * 									functions prototypes
