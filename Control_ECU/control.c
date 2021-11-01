@@ -40,6 +40,7 @@ uint8 g_flag =0;
 #define CONTROL_PASSWORD_MATCH 0x11
 #define CONTROL_PASSWORD_DISMATCH 0x00
 #define CONTROL_ECU_READY 0x10
+#define CONTINUE_PROGRAM 0X55
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
@@ -191,9 +192,18 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
 	/*setup the TIMER1 configuration */
-	TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,60000};
+	/*
+	 * 1) f_cpu = 8Mhz i used prescaler = 1024
+	 * 2) f_timer = 8 Khz => time of one count = 1/8000
+	 * 3) to count 15 seconds no.of interrupt = 15/((1/8000)*65000) = 1.8 = 2
+	 * 4) the compare value = 65000
+	 */
+	TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,65000};
+	/*receive the password from the HMI ECU */
 	CONTROL_receivePasswordFromHMI(password_ptr);
+	/*get the existing password in EEPROM*/
 	CONTROL_getPasswordEEPROM(existing_password);
+	/**/
 	if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
 		CONTROL_sendStatus(OPENING_DOOR);
 		/*i will make it rotates for 15 seconds*/
@@ -220,6 +230,8 @@ void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
 		if(wrong_pass_count < 3){
 			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
 		}else{
+			/*reset the counter to be able to use it again*/
+			wrong_pass_count = 0;
 			CONTROL_sendStatus(ERROR_MESSAGE);
 			BUZZER_ON();
 		}

@@ -205,7 +205,7 @@ void HMI_handleOptions(uint8* password_ptr){
 				}
 			}else if(g_status == CONTROL_PASSWORD_DISMATCH){
 				LCD_clear();
-				LCD_displayString((uint8*)"dismatch");
+				LCD_displayString((uint8*)"Dismatch");
 			}
 			else if(g_status == ERROR_MESSAGE){
 				LCD_clear();
