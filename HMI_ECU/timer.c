@@ -65,7 +65,7 @@ ISR(TIMER2_COMP_vect){
  * Function Description :this function configure any timer in AVR micro with any mode we want
  * normal or compare mode
  */
-void TIMER_init(const configType* config_struct_ptr){
+void TIMER_init(const TimerconfigType* config_struct_ptr){
 	/*first check the timer id*/
 	if(config_struct_ptr->timer_id == timer0_ID){
 		/*check the timer mode you want to work with*/
