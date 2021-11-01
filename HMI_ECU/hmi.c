@@ -48,7 +48,7 @@ uint8 HMI_receiveStatus(void);
  *******************************************************************************/
 int main(void){
 	/*to hold the first_password taken from the user*/
-	uint8 first_password_buff[NUM_OF_PASSWORD_DIGIT];
+	uint8 first_password_buff[NUM_OF_PASSWORD_DIGIT];F_CPU;
 	/*to hold the second_password taken from the user*/
 	uint8 second_password_buff[NUM_OF_PASSWORD_DIGIT];
 
