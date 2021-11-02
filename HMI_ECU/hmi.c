@@ -48,8 +48,9 @@ void HMI_sendPasswordToControl(const uint8* password_ptr);
 void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
 void HMI_displayMainOptions(void);
 void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
-void HMI_handleOptions(uint8* password_ptr);
+void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
 void HMI_handleTimer(void);
+void HMI_sendOption(uint8 option);
 uint8 HMI_takeOption(void);
 uint8 HMI_receiveStatus(void);
 /*******************************************************************************
@@ -79,7 +80,7 @@ int main(void){
 		/************************************************************************************************/
 												/*step2 code*/
 		/************************************************************************************************/
-		HMI_handleOptions(first_password_buff);
+		HMI_handleOptions(first_password_buff,second_password_buff);
 		/************************************************************************************************/
 
 	}
@@ -141,12 +142,12 @@ void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_
 		HMI_setPasswordFirstTime(a_first_password_ptr,a_second_password_ptr);
 		g_status = HMI_receiveStatus();
 		if(g_status == CONTROL_PASSWORD_MATCH){
-			LCD_displayString((uint8*)"Correct!!");
+			LCD_displayString((uint8*)"Correct Password saved...");
 			_delay_ms(500);/*to be able to see the message*/
 			break;/*go to the next step*/
 		}else{
 			/*i will repeat the step1 if the passwords do not match*/
-			LCD_displayString((uint8*)"Not Correct");
+			LCD_displayString((uint8*)"Not Correct Password not saved...");
 			_delay_ms(500);/*to be able to see the message*/
 		}
 	}
@@ -179,7 +180,12 @@ uint8 HMI_takeOption(void){
 void HMI_handleTimer(void){
 	g_timer_flag ++;
 }
-void HMI_handleOptions(uint8* password_ptr){
+void HMI_sendOption(uint8 option){
+	UART_sendByte(HMI_ECU_READY);
+	while(UART_recieveByte()!= CONTROL_ECU_READY);
+	return UART_sendByte(option);
+}
+void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 
 
 	/*setup the TIMER1 configuration */
@@ -197,16 +203,18 @@ void HMI_handleOptions(uint8* password_ptr){
 		HMI_displayMainOptions();
 		/*take the input*/
 		selected_option = HMI_takeOption();
+		HMI_sendOption(selected_option);
 		if(selected_option == OPEN_DOOR_OPTION){
+			/*this loop used to stuck asking about the password if the wrong one entered*/
 			while(1){
 				LCD_clear();
 			/*tell the user to enter the password*/
 			LCD_displayString((uint8*)"Please Enter password : ");
 			_delay_ms(200);
 			/*take the password from the user*/
-			HMI_takePassword(password_ptr);
+			HMI_takePassword(a_first_password_ptr);
 			/*send the password to control 	ECU to check it*/
-			HMI_sendPasswordToControl(password_ptr);
+			HMI_sendPasswordToControl(a_first_password_ptr);
 			/*receive the status of the password sent by the control ECU*/
 			g_status = HMI_receiveStatus();
 			/*check on the status to display suitable message*/
@@ -224,7 +232,6 @@ void HMI_handleOptions(uint8* password_ptr){
 					g_status = HMI_receiveStatus();
 					/*to display the main menu again*/
 					break;
-
 				}
 			}else if(g_status == CONTROL_PASSWORD_DISMATCH){
 				LCD_clear();
@@ -241,7 +248,38 @@ void HMI_handleOptions(uint8* password_ptr){
 			}
 		}
 		}else if(selected_option == CHANGE_PASSWORD_OPTION){
+			/*this loop used to stuck asking about the password if the wrong one entered*/
+			while(1){
+				LCD_clear();
+				/*tell the user to enter the password*/
+				LCD_displayString((uint8*)"Please Enter password : ");
+				_delay_ms(200);
+				/*take the password from the user*/
+				HMI_takePassword(a_first_password_ptr);
+				/*send the password to control 	ECU to check it*/
+				HMI_sendPasswordToControl(a_first_password_ptr);
+				/*receive the status of the password sent by the control ECU*/
+				g_status = HMI_receiveStatus();
+				if(g_status == CONTROL_PASSWORD_MATCH){
+					LCD_displayString("changing the password....");
+					_delay_ms(1000);
+					HMI_setAndCheckStatus(a_first_password_ptr,a_second_password_ptr);
+					break;
+				}else if(g_status == CONTROL_PASSWORD_DISMATCH){
+					LCD_clear();
+					LCD_displayString((uint8*)"Wrong Password !");
+					_delay_ms(500);
+					/*No break statement to keep asking about the password and do not let it go to the main menu*/
+				}
+				else if(g_status == ERROR_MESSAGE){
+					LCD_clear();
+					LCD_displayString((uint8*)"ERROR !");
+					HMI_receiveStatus();/*to wait until receive continue program status*/
+					/*to display the main menu again*/
+					break;
+				}
 
+			}
 		}
 	}
 }

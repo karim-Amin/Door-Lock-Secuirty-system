@@ -23,7 +23,6 @@
 uint8 g_timer_tick=0;
 /*to know how many times the user entered wrong password*/
 uint8 wrong_pass_count = 0;
-uint8 g_flag =0;
 /*******************************************************************************
  *                                Definitions                                  *
  *******************************************************************************/
@@ -41,6 +40,8 @@ uint8 g_flag =0;
 #define CONTROL_PASSWORD_DISMATCH 0x00
 #define CONTROL_ECU_READY 0x10
 #define CONTINUE_PROGRAM 0X55
+#define OPEN_DOOR_OPTION '+'
+#define CHANGE_PASSWORD_OPTION '-'
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
@@ -57,11 +58,13 @@ void CONTROL_savePasswordInEEPROM(const uint8* password_ptr);
 /*
  * Description : it will send the status (matching or not matching).
  */
+uint8 CONTROL_getOption(void);
 void CONTROL_sendStatus(uint8 state);
 void CONTROL_getPasswordEEPROM(uint8* password_ptr);
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password);
 void CONTROL_handelTimer(void);
 void CONTROL_delayWithTimer(TimerconfigType* s_config,uint8 interrupt_number);
+void CONTROL_handelChangePasswordOption(uint8* password_ptr,uint8* existing_password);
 /*
  * Description : this function receives two passwords for HMI_ECU and check them
  * if they match ,it will save this password in the EEPROM.
@@ -82,6 +85,8 @@ int main(void){
 	/*to hold the second_password taken from the user*/
 	uint8 second_password_buff[NUM_OF_PASSWORD_DIGIT];
 
+	/*to hold the selected option from HMI ECU*/
+	uint8 selected_option;
 	/*setup the UART configuration*/
 	config_struct s_uart_config = {no_parity,eigth_bits,one_stop_bit,Asynch,CONTROL_ECU_BAUD_RATE};
 
@@ -92,21 +97,37 @@ int main(void){
 	TIMER1_setCallBack(CONTROL_handelTimer);
 
 	/* 	calling the init functions for each driver */
+	/* initialise the UART driver*/
 	UART_init(&s_uart_config);
+	/* initialise the I2C driver*/
 	TWI_init(&s_twi_config);
+	/* initialise the motor external driver*/
 	DcMotor_init();
+	/* initialise the buzzer external driver*/
 	BUZZER_init();
 	/*set the I-bit to be able to use the timer driver*/
 	SREG |= (1<<7);
 	while(1){
-		/*check if the passwords sent by HMI_ECU are identical and send to it the status*/
-		if(CONTROL_setupFirstPassword(first_password_buff,second_password_buff) == SUCCESS){
-			CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
-		}else{
-			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+		/*this loop keeps taking inputs until two matches*/
+		while(1){
+			/*check if the passwords sent by HMI_ECU are identical and send to it the status*/
+			if(CONTROL_setupFirstPassword(first_password_buff,second_password_buff) == SUCCESS){
+				CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
+				break;
+			}else{
+				CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+			}
 		}
-		while(g_flag == 0){
-		CONTROL_handelOpenDoor(first_password_buff,second_password_buff);
+		while(1){
+			/*wait until receives the option from HMI ECU*/
+			selected_option = CONTROL_getOption();
+			if(selected_option == OPEN_DOOR_OPTION){
+				CONTROL_handelOpenDoor(first_password_buff,second_password_buff);
+			}else if(selected_option == CHANGE_PASSWORD_OPTION)
+			{
+				CONTROL_handelChangePasswordOption(first_password_buff,second_password_buff);
+			}
+
 		}
 	}
 	return 0;
@@ -172,7 +193,11 @@ uint8 CONTROL_setupFirstPassword(uint8* a_first_password_ptr,uint8* a_second_pas
 		return ERROR;
 	}
 }
-
+uint8 CONTROL_getOption(void){
+	while(UART_recieveByte()!= HMI_ECU_READY);
+	UART_sendByte(CONTROL_ECU_READY);
+	return UART_recieveByte();
+}
 void CONTROL_sendStatus(uint8 state){
 	UART_sendByte(CONTROL_ECU_READY);
 	while(UART_recieveByte()!= HMI_ECU_READY);
@@ -190,6 +215,57 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 		EEPROM_readByte(PASSWORD_ADDRESS_IN_EEPROM + counter,password_ptr+counter);
 	}
 }
+void CONTROL_handelChangePasswordOption(uint8* password_ptr,uint8* existing_password){
+	while(1){
+		/*receive the password from the HMI ECU */
+		CONTROL_receivePasswordFromHMI(password_ptr);
+		/*get the existing password in EEPROM*/
+		CONTROL_getPasswordEEPROM(existing_password);
+		/*check the two password*/
+		if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
+			/*if they match change the password in EEPROM and send the status to inform the HMI ECU*/
+			CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
+			while(1){
+				/*save the password received from HMI CEU IN EEPROM*/
+				if(CONTROL_setupFirstPassword(password_ptr,existing_password)==SUCCESS){
+					CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
+					break;
+				}else{
+					CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+				}
+			}
+			wrong_pass_count = 0;
+			break;
+		}else{
+			wrong_pass_count++;
+			if(wrong_pass_count < 3){
+				CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+			}else{
+				/*reset the counter to be able to use it again*/
+				wrong_pass_count = 0;
+				/*tell HMI ECU to display error message*/
+				CONTROL_sendStatus(ERROR_MESSAGE);
+				/*START the alarm*/
+				BUZZER_ON();
+				/*setup the TIMER1 configuration */
+				/*
+				 * 1) f_cpu = 8Mhz i used prescaler = 1024
+				 * 2) f_timer = 8 Khz => time of one count = 1/8000
+				 * 3) to count 60 seconds no.of interrupt = 60/((1/8000)*2^16) = 7.324 = 7
+				 * 4) i will work with timer 1 overflow mode
+				 */
+				TimerconfigType s_timer1_config = {timer1_ID,normal_mode,prescaler_1024,0,0};
+				/*waiting 1 minute using timer 1*/
+				CONTROL_delayWithTimer(&s_timer1_config,7);
+				/*stop the alarm*/
+				BUZZER_OFF();
+				/*tell HMI ECU to display the main menu again*/
+				CONTROL_sendStatus(CONTINUE_PROGRAM);
+				break;
+		}
+	}
+}
+}
 /*
  * description : this function is major to handle open the door request ,receives the password form hmi ECU
  * ,then it compares this password with the one saved in EEPROM .
@@ -198,65 +274,75 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
  * to continue the program
  */
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
-	/*setup the TIMER1 configuration */
-	/*
-	 * 1) f_cpu = 8Mhz i used prescaler = 1024
-	 * 2) f_timer = 8 Khz => time of one count = 1/8000
-	 * 3) to count 15 seconds no.of interrupt = 15/((1/8000)*65000) = 1.8 = 2
-	 * 4) the compare value = 65000
-	 */
-	TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,65000};
-	/*receive the password from the HMI ECU */
-	CONTROL_receivePasswordFromHMI(password_ptr);
-	/*get the existing password in EEPROM*/
-	CONTROL_getPasswordEEPROM(existing_password);
-	/*check the two password*/
-	if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
-		/*if they match open the door and send the status to inform the HMI ECU*/
-		CONTROL_sendStatus(OPENING_DOOR);
-		/*i will make it rotates for 15 seconds*/
-		DcMotor_Rotate(clock_wise,100);
-		/*start counting 15 seconds*/
-		CONTROL_delayWithTimer(&s_timer1_config,2);
-		/*after 15 seconds the motor will stop for 3 seconds*/
-		DcMotor_Rotate(stop_motor,0);
+	while(1){
 		/*setup the TIMER1 configuration */
 		/*
 		 * 1) f_cpu = 8Mhz i used prescaler = 1024
 		 * 2) f_timer = 8 Khz => time of one count = 1/8000
-		 * 3) to count 3 seconds no.of interrupt = 3/((1/8000)*24000) = 1
-		 * 4) the compare value = 24000
+		 * 3) to count 15 seconds no.of interrupt = 15/((1/8000)*65000) = 1.8 = 2
+		 * 4) the compare value = 65000
 		 */
-		TimerconfigType s_timer1_config_three_seconds = {timer1_ID,compare_mode,prescaler_1024,0,24000};
-		/*wait 3 sconds*/
-		CONTROL_delayWithTimer(&s_timer1_config_three_seconds,1);
-		/*to let HMI ECU knows that the door is closing*/
-		CONTROL_sendStatus(CLOSING_DOOR);
-		/*i will make it rotates anti clock wise for 15 seconds to close the door*/
-		DcMotor_Rotate(anti_clock_wise,100);
-		CONTROL_delayWithTimer(&s_timer1_config,2);
-		DcMotor_Rotate(stop_motor,0);
-		/*to let HMI ECU knows to stop displaying */
-		CONTROL_sendStatus(DOOR_CLOSED);
-	}else{
-		wrong_pass_count++;
-		if(wrong_pass_count < 3){
-			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
-		}else{
-			/*reset the counter to be able to use it again*/
-			wrong_pass_count = 0;
-			CONTROL_sendStatus(ERROR_MESSAGE);
-			BUZZER_ON();
+		TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,65000};
+		/*receive the password from the HMI ECU */
+		CONTROL_receivePasswordFromHMI(password_ptr);
+		/*get the existing password in EEPROM*/
+		CONTROL_getPasswordEEPROM(existing_password);
+		/*check the two password*/
+		if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
+			/*if they match open the door and send the status to inform the HMI ECU*/
+			CONTROL_sendStatus(OPENING_DOOR);
+			/*i will make it rotates for 15 seconds*/
+			DcMotor_Rotate(clock_wise,100);
+			/*start counting 15 seconds*/
+			CONTROL_delayWithTimer(&s_timer1_config,2);
+			/*after 15 seconds the motor will stop for 3 seconds*/
+			DcMotor_Rotate(stop_motor,0);
 			/*setup the TIMER1 configuration */
 			/*
 			 * 1) f_cpu = 8Mhz i used prescaler = 1024
 			 * 2) f_timer = 8 Khz => time of one count = 1/8000
-			 * 3) to count 60 seconds no.of interrupt = 60/((1/8000)*2^16) = 7.324 = 7
-			 * 4) i will work with timer 1 overflow mode
+			 * 3) to count 3 seconds no.of interrupt = 3/((1/8000)*24000) = 1
+			 * 4) the compare value = 24000
 			 */
-			TimerconfigType s_timer1_config = {timer1_ID,normal_mode,prescaler_1024,0,0};
-			CONTROL_delayWithTimer(&s_timer1_config,7);
-			CONTROL_sendStatus(CONTINUE_PROGRAM);
+			TimerconfigType s_timer1_config_three_seconds = {timer1_ID,compare_mode,prescaler_1024,0,24000};
+			/*wait 3 sconds*/
+			CONTROL_delayWithTimer(&s_timer1_config_three_seconds,1);
+			/*to let HMI ECU knows that the door is closing*/
+			CONTROL_sendStatus(CLOSING_DOOR);
+			/*i will make it rotates anti clock wise for 15 seconds to close the door*/
+			DcMotor_Rotate(anti_clock_wise,100);
+			CONTROL_delayWithTimer(&s_timer1_config,2);
+			DcMotor_Rotate(stop_motor,0);
+			/*to let HMI ECU knows to stop displaying */
+			CONTROL_sendStatus(DOOR_CLOSED);
+			break;
+		}else{
+			wrong_pass_count++;
+			if(wrong_pass_count < 3){
+				CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
+			}else{
+				/*reset the counter to be able to use it again*/
+				wrong_pass_count = 0;
+				/*tell HMI ECU to display error message*/
+				CONTROL_sendStatus(ERROR_MESSAGE);
+				/*START the alarm*/
+				BUZZER_ON();
+				/*setup the TIMER1 configuration */
+				/*
+				 * 1) f_cpu = 8Mhz i used prescaler = 1024
+				 * 2) f_timer = 8 Khz => time of one count = 1/8000
+				 * 3) to count 60 seconds no.of interrupt = 60/((1/8000)*2^16) = 7.324 = 7
+				 * 4) i will work with timer 1 overflow mode
+				 */
+				TimerconfigType s_timer1_config = {timer1_ID,normal_mode,prescaler_1024,0,0};
+				/*waiting 1 minute using timer 1*/
+				CONTROL_delayWithTimer(&s_timer1_config,7);
+				/*stop the alarm*/
+				BUZZER_OFF();
+				/*tell HMI ECU to display the main menu again*/
+				CONTROL_sendStatus(CONTINUE_PROGRAM);
+				break;
+			}
 		}
 	}
 }
