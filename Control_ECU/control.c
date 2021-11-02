@@ -61,6 +61,7 @@ void CONTROL_sendStatus(uint8 state);
 void CONTROL_getPasswordEEPROM(uint8* password_ptr);
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password);
 void CONTROL_handelTimer(void);
+void CONTROL_delayWithTimer(TimerconfigType* s_config,uint8 interrupt_number);
 /*
  * Description : this function receives two passwords for HMI_ECU and check them
  * if they match ,it will save this password in the EEPROM.
@@ -189,7 +190,13 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 		EEPROM_readByte(PASSWORD_ADDRESS_IN_EEPROM + counter,password_ptr+counter);
 	}
 }
-
+/*
+ * description : this function is major to handle open the door request ,receives the password form hmi ECU
+ * ,then it compares this password with the one saved in EEPROM .
+ * i will open the door if they match and send the status for HMI ECU ,if the user entered the password three
+ * times wrong the control ECU will trigger alarm for 1 minute ,then  control ECU informs the HMI ECU
+ * to continue the program
+ */
 void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
 	/*setup the TIMER1 configuration */
 	/*
@@ -203,27 +210,33 @@ void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
 	CONTROL_receivePasswordFromHMI(password_ptr);
 	/*get the existing password in EEPROM*/
 	CONTROL_getPasswordEEPROM(existing_password);
-	/**/
+	/*check the two password*/
 	if(CONTROL_checkTwoPasswords(password_ptr,existing_password) == TRUE){
+		/*if they match open the door and send the status to inform the HMI ECU*/
 		CONTROL_sendStatus(OPENING_DOOR);
 		/*i will make it rotates for 15 seconds*/
 		DcMotor_Rotate(clock_wise,100);
 		/*start counting 15 seconds*/
-		TIMER_init(&s_timer1_config);
-		while(g_timer_tick < 2);
-		TIMER_deinit(timer1_ID);
-		g_timer_tick = 0;
+		CONTROL_delayWithTimer(&s_timer1_config,2);
+		/*after 15 seconds the motor will stop for 3 seconds*/
 		DcMotor_Rotate(stop_motor,0);
-		/*let the door open for 3 seconds*/
-		_delay_ms(3000);
+		/*setup the TIMER1 configuration */
+		/*
+		 * 1) f_cpu = 8Mhz i used prescaler = 1024
+		 * 2) f_timer = 8 Khz => time of one count = 1/8000
+		 * 3) to count 3 seconds no.of interrupt = 3/((1/8000)*24000) = 1
+		 * 4) the compare value = 24000
+		 */
+		TimerconfigType s_timer1_config_three_seconds = {timer1_ID,compare_mode,prescaler_1024,0,24000};
+		/*wait 3 sconds*/
+		CONTROL_delayWithTimer(&s_timer1_config_three_seconds,1);
+		/*to let HMI ECU knows that the door is closing*/
 		CONTROL_sendStatus(CLOSING_DOOR);
 		/*i will make it rotates anti clock wise for 15 seconds to close the door*/
 		DcMotor_Rotate(anti_clock_wise,100);
-		TIMER_init(&s_timer1_config);
-		while(g_timer_tick < 2);
-		TIMER_deinit(timer1_ID);
-		g_timer_tick = 0;
+		CONTROL_delayWithTimer(&s_timer1_config,2);
 		DcMotor_Rotate(stop_motor,0);
+		/*to let HMI ECU knows to stop displaying */
 		CONTROL_sendStatus(DOOR_CLOSED);
 	}else{
 		wrong_pass_count++;
@@ -234,10 +247,36 @@ void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password){
 			wrong_pass_count = 0;
 			CONTROL_sendStatus(ERROR_MESSAGE);
 			BUZZER_ON();
+			/*setup the TIMER1 configuration */
+			/*
+			 * 1) f_cpu = 8Mhz i used prescaler = 1024
+			 * 2) f_timer = 8 Khz => time of one count = 1/8000
+			 * 3) to count 60 seconds no.of interrupt = 60/((1/8000)*2^16) = 7.324 = 7
+			 * 4) i will work with timer 1 overflow mode
+			 */
+			TimerconfigType s_timer1_config = {timer1_ID,normal_mode,prescaler_1024,0,0};
+			CONTROL_delayWithTimer(&s_timer1_config,7);
+			CONTROL_sendStatus(CONTINUE_PROGRAM);
 		}
 	}
 }
-
+/*
+ * description : this function tells the timer to start counting with specific configuration
+ * and give it how many interrupts you want
+ */
+void CONTROL_delayWithTimer(TimerconfigType* s_config,uint8 interrupt_number){
+	/*set the configuration passed*/
+	TIMER_init(s_config);
+	/*wait until number of interrupts specified  */
+	while(g_timer_tick < interrupt_number);
+	/*stop the timer counting and to be able to set another configuration*/
+	TIMER_deinit(s_config->timer_id);
+	/*reset the number of ticks*/
+	g_timer_tick = 0;
+}
+/*
+ * description : this function will be called back when the timer go to its interrupt service routine
+ */
 void CONTROL_handelTimer(void){
 	g_timer_tick++;
 }

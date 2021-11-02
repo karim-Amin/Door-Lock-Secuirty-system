@@ -39,6 +39,7 @@ uint8 g_status;
 #define OPENING_DOOR 0X22
 #define CLOSING_DOOR 0X33
 #define DOOR_CLOSED 0X44
+#define CONTINUE_PROGRAM 0X55
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
@@ -180,37 +181,65 @@ void HMI_handleTimer(void){
 }
 void HMI_handleOptions(uint8* password_ptr){
 
+
 	/*setup the TIMER1 configuration */
+	/*
+	 * 1) f_cpu = 8Mhz i used prescaler = 1024
+	 * 2) f_timer = 8 Khz => time of one count = 1/8000
+	 * 3) to count 3 seconds no.of interrupt = 3/((1/8000)*24000) = 1
+	 * 4) the compare value = 24000
+	 */
 	//TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,60000};
 	/*to hold the option that the user choose*/
 	uint8 selected_option;
 	while(1){
+		/*display option*/
 		HMI_displayMainOptions();
+		/*take the input*/
 		selected_option = HMI_takeOption();
 		if(selected_option == OPEN_DOOR_OPTION){
-			LCD_clear();
-			LCD_displayString((uint8*)"Please Enter password : ");
-			_delay_ms(250);
-			HMI_takePassword(password_ptr);
-			HMI_sendPasswordToControl(password_ptr);
-			g_status = HMI_receiveStatus();
-			if(g_status == OPENING_DOOR){
+			while(1){
 				LCD_clear();
+			/*tell the user to enter the password*/
+			LCD_displayString((uint8*)"Please Enter password : ");
+			_delay_ms(200);
+			/*take the password from the user*/
+			HMI_takePassword(password_ptr);
+			/*send the password to control 	ECU to check it*/
+			HMI_sendPasswordToControl(password_ptr);
+			/*receive the status of the password sent by the control ECU*/
+			g_status = HMI_receiveStatus();
+			/*check on the status to display suitable message*/
+			if(g_status == OPENING_DOOR){
+				/*opening the door status means that correct password */
+				LCD_clear();
+				/*display this message synchronised with the action */
 				LCD_displayString((uint8*)"Opening The Door");
+				/*keep displaying this until receiving closing the door status*/
 				g_status = HMI_receiveStatus();
 				if(g_status == CLOSING_DOOR){
 					LCD_clear();
 					LCD_displayString((uint8*)"closing The Door");
+					/*i will receive door closed DOOR_CLOSED macro*/
 					g_status = HMI_receiveStatus();
+					/*to display the main menu again*/
+					break;
+
 				}
 			}else if(g_status == CONTROL_PASSWORD_DISMATCH){
 				LCD_clear();
-				LCD_displayString((uint8*)"Dismatch");
+				LCD_displayString((uint8*)"Wrong Password !");
+				_delay_ms(500);
+				/*No break statement to keep asking about the password and do not let it go to the main menu*/
 			}
 			else if(g_status == ERROR_MESSAGE){
 				LCD_clear();
 				LCD_displayString((uint8*)"ERROR !");
+				HMI_receiveStatus();/*to wait until receive continue program status*/
+				/*to display the main menu again*/
+				break;
 			}
+		}
 		}else if(selected_option == CHANGE_PASSWORD_OPTION){
 
 		}
