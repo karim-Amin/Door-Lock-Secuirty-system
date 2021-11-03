@@ -61,10 +61,8 @@ int main(void){
 	uint8 first_password_buff[NUM_OF_PASSWORD_DIGIT];
 	/*to hold the second_password taken from the user*/
 	uint8 second_password_buff[NUM_OF_PASSWORD_DIGIT];
-
 	/*setup the UART configuration*/
 	config_struct s_uart_config = {no_parity,eigth_bits,one_stop_bit,Asynch,HMI_BAUD_RATE};
-
 	/*setting the callback functions*/
 	TIMER1_setCallBack(HMI_handleTimer);
 	/* 	calling the init functions for each driver */
@@ -136,6 +134,9 @@ void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_passwo
 	HMI_sendPasswordToControl(a_first_password_ptr);
 	HMI_sendPasswordToControl(a_second_password_ptr);
 }
+/*
+ * Description :
+ */
 void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	while(1)
 	{
@@ -177,33 +178,35 @@ void HMI_displayMainOptions(void){
 uint8 HMI_takeOption(void){
 	return KEYPAD_getPressedKey();
 }
+/*
+ * Description :
+ */
 void HMI_handleTimer(void){
 	g_timer_flag ++;
 }
+/*
+ * Description :
+ */
 void HMI_sendOption(uint8 option){
 	UART_sendByte(HMI_ECU_READY);
 	while(UART_recieveByte()!= CONTROL_ECU_READY);
 	return UART_sendByte(option);
 }
+/*
+ * Description :
+ */
 void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
-
-
-	/*setup the TIMER1 configuration */
-	/*
-	 * 1) f_cpu = 8Mhz i used prescaler = 1024
-	 * 2) f_timer = 8 Khz => time of one count = 1/8000
-	 * 3) to count 3 seconds no.of interrupt = 3/((1/8000)*24000) = 1
-	 * 4) the compare value = 24000
-	 */
-	//TimerconfigType s_timer1_config = {timer1_ID,compare_mode,prescaler_1024,0,60000};
 	/*to hold the option that the user choose*/
 	uint8 selected_option;
+	/*this while loop used to keep asking the user to choose from the main menu*/
 	while(1){
 		/*display option*/
 		HMI_displayMainOptions();
 		/*take the input*/
 		selected_option = HMI_takeOption();
+		/*send the order to CONTROL ECU to handle it*/
 		HMI_sendOption(selected_option);
+		/*check the selected option first*/
 		if(selected_option == OPEN_DOOR_OPTION){
 			/*this loop used to stuck asking about the password if the wrong one entered*/
 			while(1){
@@ -225,20 +228,25 @@ void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr)
 				LCD_displayString((uint8*)"Opening The Door");
 				/*keep displaying this until receiving closing the door status*/
 				g_status = HMI_receiveStatus();
+				/*if the status sent by control ecu is closing the door*/
 				if(g_status == CLOSING_DOOR){
 					LCD_clear();
+					/*display message closing on the screen*/
 					LCD_displayString((uint8*)"closing The Door");
-					/*i will receive door closed DOOR_CLOSED macro*/
+					/*i will wait and receive door closed DOOR_CLOSED macro*/
 					g_status = HMI_receiveStatus();
 					/*to display the main menu again*/
 					break;
 				}
-			}else if(g_status == CONTROL_PASSWORD_DISMATCH){
+			}
+			/**/
+			else if(g_status == CONTROL_PASSWORD_DISMATCH){
 				LCD_clear();
 				LCD_displayString((uint8*)"Wrong Password !");
 				_delay_ms(500);
 				/*No break statement to keep asking about the password and do not let it go to the main menu*/
 			}
+			/**/
 			else if(g_status == ERROR_MESSAGE){
 				LCD_clear();
 				LCD_displayString((uint8*)"ERROR !");
