@@ -45,19 +45,8 @@ uint8 wrong_pass_count = 0;
 /*******************************************************************************
  *                              Functions Prototypes                           *
  *******************************************************************************/
-/*
- * Description : this function is synchronised with the UART in human machine interface and
- * it loops until it takes the entire password.
- */
 void CONTROL_receivePasswordFromHMI(uint8* password_ptr);
-/*
- * Description : set the entire password in EEPROM in specific locations ,and make constraints on
- *  this function do not let it change in the password
- */
 void CONTROL_savePasswordInEEPROM(const uint8* password_ptr);
-/*
- * Description : it will send the status (matching or not matching).
- */
 uint8 CONTROL_getOption(void);
 void CONTROL_sendStatus(uint8 state);
 void CONTROL_getPasswordEEPROM(uint8* password_ptr);
@@ -65,15 +54,7 @@ void CONTROL_handelOpenDoor(uint8* password_ptr,uint8* existing_password);
 void CONTROL_handelTimer(void);
 void CONTROL_delayWithTimer(TimerconfigType* s_config,uint8 interrupt_number);
 void CONTROL_handelChangePasswordOption(uint8* password_ptr,uint8* existing_password);
-/*
- * Description : this function receives two passwords for HMI_ECU and check them
- * if they match ,it will save this password in the EEPROM.
- */
 uint8 CONTROL_setupFirstPassword(uint8* a_first_password_ptr,uint8* a_second_password_ptr);
-/*
- * Description : to create new password you have to enter it twice this function will check
- * if this two password matching or not
- */
 uint8 CONTROL_checkTwoPasswords(const uint8* a_first_password_ptr,const uint8* a_second_password_ptr);
 /*******************************************************************************
  *                             The entry point (main method)                  *
@@ -121,6 +102,10 @@ int main(void){
 		while(1){
 			/*wait until receives the option from HMI ECU*/
 			selected_option = CONTROL_getOption();
+			/*before we handle the option reset the wrong password counter to turn on the alarm
+			 * after three consecutive wrong passwords
+			 */
+			wrong_pass_count = 0;
 			if(selected_option == OPEN_DOOR_OPTION){
 				CONTROL_handelOpenDoor(first_password_buff,second_password_buff);
 			}else if(selected_option == CHANGE_PASSWORD_OPTION)
@@ -135,7 +120,10 @@ int main(void){
 /*******************************************************************************
  *                              Functions Definitions                           *
  *******************************************************************************/
-
+/*
+ * Description : this function is synchronised with the UART in human machine interface and
+ * it loops until it takes the entire password.
+ */
 void CONTROL_receivePasswordFromHMI(uint8* password_ptr){
 	/*counter for the loop*/
 	uint8 count;
@@ -148,7 +136,10 @@ void CONTROL_receivePasswordFromHMI(uint8* password_ptr){
 		password_ptr[count] = UART_recieveByte();
 	}
 }
-
+/*
+ * Description : to create new password you have to enter it twice this function will check
+ * if this two password matching or not
+ */
 uint8 CONTROL_checkTwoPasswords(const uint8* a_first_password_ptr,const uint8* a_second_password_ptr){
 	/*
 	 * 1) i is the counter for the loop
@@ -168,7 +159,10 @@ uint8 CONTROL_checkTwoPasswords(const uint8* a_first_password_ptr,const uint8* a
 		return TRUE;
 	}
 }
-
+/*
+ * Description : set the entire password in EEPROM in specific locations ,and make constraints on
+ *  this function do not let it change in the password
+ */
 void CONTROL_savePasswordInEEPROM(const uint8* password_ptr){
 	uint8 counter;
 	for(counter = 0;counter < NUM_OF_PASSWORD_DIGIT;counter++){
@@ -179,7 +173,10 @@ void CONTROL_savePasswordInEEPROM(const uint8* password_ptr){
 		EEPROM_writeByte(PASSWORD_ADDRESS_IN_EEPROM + counter,password_ptr[counter]);
 	}
 }
-
+/*
+ * Description : this function receives two passwords for HMI_ECU and check them
+ * if they match ,it will save this password in the EEPROM.
+ */
 uint8 CONTROL_setupFirstPassword(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	/*take the first password THROUGH the UART*/
 	CONTROL_receivePasswordFromHMI(a_first_password_ptr);
@@ -193,17 +190,25 @@ uint8 CONTROL_setupFirstPassword(uint8* a_first_password_ptr,uint8* a_second_pas
 		return ERROR;
 	}
 }
+/*
+ * Description : it will send the status (matching or not matching).
+ */
 uint8 CONTROL_getOption(void){
 	while(UART_recieveByte()!= HMI_ECU_READY);
 	UART_sendByte(CONTROL_ECU_READY);
 	return UART_recieveByte();
 }
+/*
+ * Description : this synchronised function sends the status of control ECU
+ */
 void CONTROL_sendStatus(uint8 state){
 	UART_sendByte(CONTROL_ECU_READY);
 	while(UART_recieveByte()!= HMI_ECU_READY);
 	UART_sendByte(state);
 }
-
+/*
+ * Description : gets the password from EEPROM (looping across the bytes in the memory).
+ */
 void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 	uint8 counter;
 
@@ -215,6 +220,11 @@ void CONTROL_getPasswordEEPROM(uint8* password_ptr){
 		EEPROM_readByte(PASSWORD_ADDRESS_IN_EEPROM + counter,password_ptr+counter);
 	}
 }
+/*
+ * Description : this function handles change password option first it checks the existing password in
+ * EEPROM if matches ,it will receives two passwords ,then checks them and save this new password in
+ * EEPROM
+ */
 void CONTROL_handelChangePasswordOption(uint8* password_ptr,uint8* existing_password){
 	while(1){
 		/*receive the password from the HMI ECU */
