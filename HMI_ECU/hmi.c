@@ -98,7 +98,7 @@ void HMI_takePassword(uint8* password_ptr){
 	/*for each byte ,i will display "*"corresponding to the byte to save the privacy */
 	for(count = 0; count<NUM_OF_PASSWORD_DIGIT ;count++){
 		password_ptr[count] = KEYPAD_getPressedKey();
-
+		/*display "*" sign to hide the passwword*/
 		LCD_displayStringRowColumn(1,count,(uint8*)"*");
 		/*to avoid taking the pressed number more than one time*/
 		_delay_ms(500);
@@ -108,7 +108,9 @@ void HMI_takePassword(uint8* password_ptr){
  * Description : this function send the password to control ECU if it is ready to receive
  */
 void HMI_sendPasswordToControl(const uint8* password_ptr){
+	/*this is counter for the loop*/
 	uint8 count;
+	/*send ready to synchronise between two ECUS*/
 	UART_sendByte(HMI_ECU_READY);
 	/*wait until the control ECU is ready to read the password*/
 	while(UART_recieveByte()!= CONTROL_ECU_READY);
@@ -118,7 +120,8 @@ void HMI_sendPasswordToControl(const uint8* password_ptr){
 		}
 }
 /*
- * Description : used to take to passwords and send them
+ * Description : used to take the passwords twice and send them to control ECU to check
+ * if they matching or not
  */
 void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	LCD_clear();
@@ -135,21 +138,26 @@ void HMI_setPasswordFirstTime(uint8* a_first_password_ptr,uint8* a_second_passwo
 	HMI_sendPasswordToControl(a_second_password_ptr);
 }
 /*
- * Description :
- */
+ * Description : this function takes two passwords , check them and display the result on LCD */
 void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
+	/*this loop to keep asking to enter two passwords if they not matching*/
 	while(1)
 	{
+		/*take two passwords and send them to control ECU*/
 		HMI_setPasswordFirstTime(a_first_password_ptr,a_second_password_ptr);
+		/*keep waiting until HMI ECU receives the status of the two passwords*/
 		g_status = HMI_receiveStatus();
+		/*if they matching*/
 		if(g_status == CONTROL_PASSWORD_MATCH){
+			/*display the result on LCD */
 			LCD_displayString((uint8*)"Correct Password saved...");
 			_delay_ms(500);/*to be able to see the message*/
 			break;/*go to the next step*/
 		}else{
 			/*i will repeat the step1 if the passwords do not match*/
 			LCD_displayString((uint8*)"Not Correct Password not saved...");
-			_delay_ms(500);/*to be able to see the message*/
+			/*to be able to see the message*/
+			_delay_ms(500);
 		}
 	}
 }
@@ -179,21 +187,23 @@ uint8 HMI_takeOption(void){
 	return KEYPAD_getPressedKey();
 }
 /*
- * Description :
+ * Description : increment the global counter for the timer
  */
 void HMI_handleTimer(void){
 	g_timer_flag ++;
 }
 /*
- * Description :
+ * Description : this synchronized function sends the option from the main menu
+ * to be handled in control ECU side
  */
 void HMI_sendOption(uint8 option){
 	UART_sendByte(HMI_ECU_READY);
 	while(UART_recieveByte()!= CONTROL_ECU_READY);
-	return UART_sendByte(option);
+	 UART_sendByte(option);
 }
 /*
- * Description :
+ * Description : this is responsible for displaying the main option ,then send the option to
+ * the control ECU ,and communicate with control ECU and handle two option
  */
 void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	/*to hold the option that the user choose*/
@@ -246,7 +256,7 @@ void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr)
 				_delay_ms(500);
 				/*No break statement to keep asking about the password and do not let it go to the main menu*/
 			}
-			/**/
+
 			else if(g_status == ERROR_MESSAGE){
 				LCD_clear();
 				LCD_displayString((uint8*)"ERROR !");
