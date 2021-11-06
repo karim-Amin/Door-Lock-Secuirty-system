@@ -20,9 +20,12 @@
 /*******************************************************************************
  *                                global variables                                  *
  *******************************************************************************/
+/*to know when the timer finishes counting*/
 uint8 g_timer_tick=0;
 /*to know how many times the user entered wrong password*/
 uint8 wrong_pass_count = 0;
+/*to know if this is the first usage of the program or not*/
+uint8 g_first_usage;
 /*******************************************************************************
  *                                Definitions                                  *
  *******************************************************************************/
@@ -30,6 +33,9 @@ uint8 wrong_pass_count = 0;
 #define CONTROL_ADDRESS 0x44
 #define NUM_OF_PASSWORD_DIGIT 5
 #define PASSWORD_ADDRESS_IN_EEPROM 0x000
+#define FIRST_USAGE_FLAG_ADDRESS 0x0FF
+#define FIRST_USAGE 0x66
+#define NOT_FIRST_USAGE 0x77
 /*							ECU communication                                */
 #define HMI_ECU_READY 0x20
 #define ERROR_MESSAGE 0xFF
@@ -88,18 +94,22 @@ int main(void){
 	BUZZER_init();
 	/*set the I-bit to be able to use the timer driver*/
 	SREG |= (1<<7);
+	/*
+	 * put this piece of code before the main function to just run once
+	 */
+	/*this loop keeps taking inputs until two matches*/
 	while(1){
-		/*this loop keeps taking inputs until two matches*/
-		while(1){
-			/*check if the passwords sent by HMI_ECU are identical and send to it the status*/
-			if(CONTROL_setupFirstPassword(first_password_buff,second_password_buff) == SUCCESS){
-				CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
-				break;
-			}else{
-				CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
-			}
+		/*check if the passwords sent by HMI_ECU are identical and send to it the status*/
+		if(CONTROL_setupFirstPassword(first_password_buff,second_password_buff) == SUCCESS){
+			CONTROL_sendStatus(CONTROL_PASSWORD_MATCH);
+			/*the two passwords are the same go to step two*/
+			break;
+		}else{
+			CONTROL_sendStatus(CONTROL_PASSWORD_DISMATCH);
 		}
-		while(1){
+	}
+	/*super loop*/
+	while(1){
 			/*wait until receives the option from HMI ECU*/
 			selected_option = CONTROL_getOption();
 			/*before we handle the option reset the wrong password counter to turn on the alarm
@@ -112,8 +122,6 @@ int main(void){
 			{
 				CONTROL_handelChangePasswordOption(first_password_buff,second_password_buff);
 			}
-
-		}
 	}
 	return 0;
 }
@@ -154,8 +162,10 @@ uint8 CONTROL_checkTwoPasswords(const uint8* a_first_password_ptr,const uint8* a
 		}
 	}
 	if(flag == 1){
+		/*return false as dismatching*/
 		return FALSE;
 	}else{
+		/*return true as matching*/
 		return TRUE;
 	}
 }

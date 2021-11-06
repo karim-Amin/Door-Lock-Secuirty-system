@@ -30,6 +30,9 @@ uint8 g_status;
 #define HMI_BAUD_RATE 9600
 #define OPEN_DOOR_OPTION '+'
 #define CHANGE_PASSWORD_OPTION '-'
+#define FIRST_USAGE 0x66
+#define NOT_FIRST_USAGE 0x77
+
 /*							ECU communication                                */
 #define CONTROL_ECU_READY 0x10
 #define CONTROL_PASSWORD_MATCH 0x11
@@ -70,11 +73,16 @@ int main(void){
 	UART_init(&s_uart_config);
 	/*set the I-bit to be able to use the timer driver*/
 	SREG |= (1<<7);
+	/************************************************************************************************/
+											/*step1 code*/
+	/************************************************************************************************/
+	/*
+	 * put this piece of code before the main function to just run once
+	 */
+	/*take the flag value in EEPROM in ECU control side*/
+	HMI_setAndCheckStatus(first_password_buff,second_password_buff);
+	/*this while loop used to keep asking the user to choose from the main menu*/
 	while(1){
-		/************************************************************************************************/
-												/*step1 code*/
-		/************************************************************************************************/
-		HMI_setAndCheckStatus(first_password_buff,second_password_buff);
 		/************************************************************************************************/
 												/*step2 code*/
 		/************************************************************************************************/
@@ -167,6 +175,7 @@ void HMI_setAndCheckStatus(uint8* a_first_password_ptr,uint8* a_second_password_
  */
 uint8 HMI_receiveStatus(void){
 	/*wait until the control ECU is ready to send the status*/
+
 	while(UART_recieveByte()!= CONTROL_ECU_READY);
 	UART_sendByte(HMI_ECU_READY);
 	/*read the status*/
@@ -208,19 +217,17 @@ void HMI_sendOption(uint8 option){
 void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr){
 	/*to hold the option that the user choose*/
 	uint8 selected_option;
-	/*this while loop used to keep asking the user to choose from the main menu*/
-	while(1){
-		/*display option*/
-		HMI_displayMainOptions();
-		/*take the input*/
-		selected_option = HMI_takeOption();
-		/*send the order to CONTROL ECU to handle it*/
-		HMI_sendOption(selected_option);
-		/*check the selected option first*/
-		if(selected_option == OPEN_DOOR_OPTION){
-			/*this loop used to stuck asking about the password if the wrong one entered*/
-			while(1){
-				LCD_clear();
+	/*display option*/
+	HMI_displayMainOptions();
+	/*take the input*/
+	selected_option = HMI_takeOption();
+	/*send the order to CONTROL ECU to handle it*/
+	HMI_sendOption(selected_option);
+	/*check the selected option first*/
+	if(selected_option == OPEN_DOOR_OPTION){
+		/*this loop used to stuck asking about the password if the wrong one entered*/
+		while(1){
+			LCD_clear();
 			/*tell the user to enter the password*/
 			LCD_displayString((uint8*)"Please Enter password : ");
 			_delay_ms(200);
@@ -279,7 +286,8 @@ void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr)
 				/*receive the status of the password sent by the control ECU*/
 				g_status = HMI_receiveStatus();
 				if(g_status == CONTROL_PASSWORD_MATCH){
-					LCD_displayString("changing the password....");
+					LCD_clear();
+					LCD_displayString((uint8*)"changing the password....");
 					_delay_ms(1000);
 					HMI_setAndCheckStatus(a_first_password_ptr,a_second_password_ptr);
 					break;
@@ -299,5 +307,5 @@ void HMI_handleOptions(uint8* a_first_password_ptr,uint8* a_second_password_ptr)
 
 			}
 		}
-	}
 }
+
